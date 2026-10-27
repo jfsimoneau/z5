@@ -131,13 +131,15 @@ namespace z5 {
         const std::string & zarrDelimiter=".",
         const int zarrFormat=2,
         const std::string & chunkKeyEncoding="default",
-        const types::ShapeType & shardShape=types::ShapeType()
+        const types::ShapeType & shardShape=types::ShapeType(),
+        const std::vector<std::string> & dimensionNames=std::vector<std::string>()
     ) {
         DatasetMetadata metadata;
         createDatasetMetadata(dtype, shape, chunkShape, root.isZarr(),
                               compressor, compressionOptions, fillValue,
                               zarrDelimiter, metadata,
-                              zarrFormat, chunkKeyEncoding, shardShape);
+                              zarrFormat, chunkKeyEncoding, shardShape,
+                              dimensionNames);
 
         #ifdef WITH_S3
         if(root.isS3()) {
@@ -174,7 +176,8 @@ namespace z5 {
         const std::string & zarrDelimiter=".",
         const int zarrFormat=2,
         const std::string & chunkKeyEncoding="default",
-        const types::ShapeType & shardShape=types::ShapeType()
+        const types::ShapeType & shardShape=types::ShapeType(),
+        const std::vector<std::string> & dimensionNames=std::vector<std::string>()
     ) {
         types::Compressor internalCompressor;
         try {
@@ -187,7 +190,8 @@ namespace z5 {
         types::jsonToCompressionType(compressionOptions, cOpts);
 
         return createDataset(root, key, dtype, shape, chunkShape, compressor, cOpts, fillValue,
-                             zarrDelimiter, zarrFormat, chunkKeyEncoding, shardShape);
+                             zarrDelimiter, zarrFormat, chunkKeyEncoding, shardShape,
+                             dimensionNames);
     }
 
 

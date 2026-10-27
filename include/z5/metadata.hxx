@@ -45,7 +45,8 @@ namespace z5 {
             const std::string & zarrDelimiter=".",
             const int zarrFormat=2,
             const std::string & chunkKeyEncoding="default",
-            const types::ShapeType & shardShape=types::ShapeType()
+            const types::ShapeType & shardShape=types::ShapeType(),
+            const std::vector<std::string> & dimensionNames=std::vector<std::string>()
             ) : Metadata(isZarr, zarrFormat),
                 dtype(dtype),
                 shape(shape),
@@ -55,7 +56,8 @@ namespace z5 {
                 fillValue(fillValue),
                 zarrDelimiter(zarrDelimiter),
                 chunkKeyEncoding(chunkKeyEncoding),
-                shardShape(shardShape)
+                shardShape(shardShape),
+                dimensionNames(dimensionNames)
         {
             checkShapes();
         }
@@ -305,6 +307,15 @@ namespace z5 {
                 j["codecs"] = innerCodecs;
             }
 
+            // optional names of the dimensions; an empty name is stored as null
+            if(!dimensionNames.empty()) {
+                nlohmann::json names = nlohmann::json::array();
+                for(const auto & name : dimensionNames) {
+                    names.push_back(name.empty() ? nlohmann::json(nullptr) : nlohmann::json(name));
+                }
+                j["dimension_names"] = names;
+            }
+
             // user attributes are stored inline; preserved/merged by the attribute layer
             if(j.find("attributes") == j.end()) {
                 j["attributes"] = nlohmann::json::object();
@@ -375,6 +386,15 @@ namespace z5 {
             }
 
             types::readV3CodecsFromJson(*innerCodecs, compressor, compressionOptions);
+
+            // optional names of the dimensions; a null name is read as empty
+            dimensionNames.clear();
+            auto namesIt = j.find("dimension_names");
+            if(namesIt != j.end() && !namesIt->is_null()) {
+                for(const auto & name : *namesIt) {
+                    dimensionNames.push_back(name.is_null() ? std::string() : name.get<std::string>());
+                }
+            }
         }
 
     public:
@@ -395,6 +415,9 @@ namespace z5 {
         std::string chunkKeyEncoding = "default";
         types::ShapeType shardShape;
 
+        // zarr v3 specific: the names of the dimensions (empty if unnamed)
+        std::vector<std::string> dimensionNames;
+
         // metadata values that are fixed for now
         // zarr format is fixed to 2
         // const std::string order = "C";
@@ -406,6 +429,9 @@ namespace z5 {
         void checkShapes() {
             if(shape.size() != chunkShape.size()) {
                 throw std::runtime_error("Dimension of shape and chunks does not agree");
+            }
+            if(!dimensionNames.empty() && dimensionNames.size() != shape.size()) {
+                throw std::runtime_error("Dimension of shape and dimension names does not agree");
             }
         }
 
@@ -456,7 +482,8 @@ namespace z5 {
         DatasetMetadata & metadata,
         const int zarrFormat=2,
         const std::string & chunkKeyEncoding="default",
-        const types::ShapeType & shardShape=types::ShapeType())
+        const types::ShapeType & shardShape=types::ShapeType(),
+        const std::vector<std::string> & dimensionNames=std::vector<std::string>())
     {
         // get the internal data type
         types::Datatype internalDtype;
@@ -495,11 +522,17 @@ namespace z5 {
             }
         }
 
+        // dimension names are only valid for zarr v3
+        if(!dimensionNames.empty() && !(createAsZarr && zarrFormat == 3)) {
+            throw std::runtime_error("z5::createDatasetMetadata: dimension names are only supported for zarr v3");
+        }
+
         metadata = DatasetMetadata(internalDtype, shape,
                                    chunkShape, createAsZarr,
                                    internalCompressor, internalCompressionOptions,
                                    fillValue, zarrDelimiter,
-                                   zarrFormat, chunkKeyEncoding, shardShape);
+                                   zarrFormat, chunkKeyEncoding, shardShape,
+                                   dimensionNames);
     }
 
 
