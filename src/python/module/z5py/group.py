@@ -200,7 +200,8 @@ class Group(Mapping):
                        data=None, chunks=None,
                        compression=None, fillvalue=0,
                        n_threads=1, shards=None,
-                       chunk_key_encoding='default', **compression_options):
+                       chunk_key_encoding='default', transpose=None,
+                       **compression_options):
         """ Create a new dataset.
 
         Create a new dataset in the group. Syntax and behaviour similar to the
@@ -225,6 +226,14 @@ class Group(Mapping):
                 If no compression is given, the default for the current format is used (default: None).
             fillvalue (float): fillvalue for empty chunks (only zarr) (default: 0).
             n_threads (int): number of threads used for chunk I/O (default: 1).
+            shards (tuple): shard shape, a multiple of ``chunks``; enables the
+                ``sharding_indexed`` codec (only zarr v3) (default: None).
+            chunk_key_encoding (str): ``'default'`` (keys nested under ``c/``) or
+                ``'v2'`` (flat keys) (only zarr v3) (default: 'default').
+            transpose (tuple): axis permutation applied to each chunk before it is
+                stored, with ``numpy.transpose`` semantics (e.g. ``(2, 1, 0)`` stores
+                chunks in Fortran order); adds the ``transpose`` codec (only zarr v3)
+                (default: None).
             **compression_options: options for the compression library.
 
         Returns:
@@ -247,6 +256,7 @@ class Group(Mapping):
                                         fillvalue, n_threads,
                                         shards=shards,
                                         chunk_key_encoding=chunk_key_encoding,
+                                        transpose=transpose,
                                         **compression_options)
 
         return Dataset._create_dataset(self, name, shape, dtype,
@@ -256,7 +266,8 @@ class Group(Mapping):
                                        self._dimension_separator,
                                        zarr_format=self._zarr_format,
                                        shards=shards,
-                                       chunk_key_encoding=chunk_key_encoding)
+                                       chunk_key_encoding=chunk_key_encoding,
+                                       transpose=transpose)
 
     def require_dataset(self, name, shape,
                         dtype=None, chunks=None,
