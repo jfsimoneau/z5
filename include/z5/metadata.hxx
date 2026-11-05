@@ -285,7 +285,8 @@ namespace z5 {
             nlohmann::json innerCodecs;
             types::writeV3CodecsToJson(compressor, compressionOptions,
                                        types::datatypeSize(dtype), innerCodecs, bigEndian,
-                                       transposeOrder);
+                                       transposeOrder, crc32cBeforeCompressor,
+                                       crc32cAfterCompressor);
 
             if(sharded) {
                 nlohmann::json sharding;
@@ -452,7 +453,8 @@ namespace z5 {
 
             types::readV3CodecsFromJson(*innerCodecs, types::datatypeSize(dtype), shape.size(),
                                         compressor, compressionOptions, bigEndian,
-                                        transposeOrder);
+                                        transposeOrder, crc32cBeforeCompressor,
+                                        crc32cAfterCompressor);
         }
 
     public:
@@ -482,6 +484,11 @@ namespace z5 {
         bool shardIndexAtStart = false;
         bool shardIndexBigEndian = false;
         bool shardIndexChecksum = true;
+
+        // zarr v3 specific: number of ``crc32c`` codecs before and after the
+        // compressor (without a compressor, all count as after it)
+        unsigned crc32cBeforeCompressor = 0;
+        unsigned crc32cAfterCompressor = 0;
 
         // zarr v3 specific: composed permutation of the ``transpose`` codecs
         // (numpy ``transpose`` semantics); empty == no transpose
@@ -551,6 +558,8 @@ namespace z5 {
         types::ShapeType shardShape;
         // zarr v3 only; the transpose codec's permutation, empty: no transpose
         std::vector<std::size_t> transposeOrder;
+        // zarr v3 only; add a crc32c codec after the compressor
+        bool crc32c = false;
     };
 
 
@@ -629,12 +638,17 @@ namespace z5 {
             }
         }
 
+        if(options.crc32c && !(createAsZarr && zarrFormat == 3)) {
+            throw std::runtime_error("z5::createDatasetMetadata: crc32c is only supported for zarr v3");
+        }
+
         metadata = DatasetMetadata(internalDtype, shape,
                                    chunkShape, createAsZarr,
                                    internalCompressor, internalCompressionOptions,
                                    options.fillValue, options.zarrDelimiter,
                                    zarrFormat, options.chunkKeyEncoding, shardShape);
         metadata.transposeOrder = order;
+        metadata.crc32cAfterCompressor = options.crc32c ? 1 : 0;
     }
 
 

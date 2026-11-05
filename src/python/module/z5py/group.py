@@ -201,7 +201,7 @@ class Group(Mapping):
                        compression=None, fillvalue=0,
                        n_threads=1, shards=None,
                        chunk_key_encoding='default', transpose=None,
-                       **compression_options):
+                       crc32c=False, **compression_options):
         """ Create a new dataset.
 
         Create a new dataset in the group. Syntax and behaviour similar to the
@@ -234,6 +234,9 @@ class Group(Mapping):
                 stored, with ``numpy.transpose`` semantics (e.g. ``(2, 1, 0)`` stores
                 chunks in Fortran order); adds the ``transpose`` codec (only zarr v3)
                 (default: None).
+            crc32c (bool): append a CRC32C checksum to every chunk (inner chunk when
+                sharded), verified on read; adds the ``crc32c`` codec after the
+                compressor (only zarr v3) (default: False).
             **compression_options: options for the compression library.
 
         Returns:
@@ -257,6 +260,7 @@ class Group(Mapping):
                                         shards=shards,
                                         chunk_key_encoding=chunk_key_encoding,
                                         transpose=transpose,
+                                        crc32c=crc32c,
                                         **compression_options)
 
         return Dataset._create_dataset(self, name, shape, dtype,
@@ -267,7 +271,8 @@ class Group(Mapping):
                                        zarr_format=self._zarr_format,
                                        shards=shards,
                                        chunk_key_encoding=chunk_key_encoding,
-                                       transpose=transpose)
+                                       transpose=transpose,
+                                       crc32c=crc32c)
 
     def require_dataset(self, name, shape,
                         dtype=None, chunks=None,
