@@ -295,13 +295,15 @@ namespace z5 {
                 nlohmann::json indexCodecs = nlohmann::json::array();
                 nlohmann::json bytesCodec;
                 bytesCodec["name"] = "bytes";
-                bytesCodec["configuration"]["endian"] = "little";
+                bytesCodec["configuration"]["endian"] = shardIndexBigEndian ? "big" : "little";
                 indexCodecs.push_back(bytesCodec);
-                nlohmann::json crcCodec;
-                crcCodec["name"] = "crc32c";
-                indexCodecs.push_back(crcCodec);
+                if(shardIndexChecksum) {
+                    nlohmann::json crcCodec;
+                    crcCodec["name"] = "crc32c";
+                    indexCodecs.push_back(crcCodec);
+                }
                 sharding["configuration"]["index_codecs"] = indexCodecs;
-                sharding["configuration"]["index_location"] = "end";
+                sharding["configuration"]["index_location"] = shardIndexAtStart ? "start" : "end";
                 j["codecs"] = nlohmann::json::array({sharding});
             } else {
                 j["codecs"] = innerCodecs;
@@ -341,25 +343,29 @@ namespace z5 {
             }
         }
 
-        // z5 reads the shard index as little-endian uint64 pairs at the end of
-        // the shard, followed by a crc32c; reading another layout would make
-        // every shard look empty
-        static void checkV3ShardIndex(const nlohmann::json & scfg) {
-            const auto loc = scfg.find("index_location");
-            if(loc != scfg.end() && *loc != "end") {
-                throw std::runtime_error("z5.DatasetMetadata.fromJsonV3: shard index_location " +
-                                         loc->dump() + " is not supported");
+        // read the shard index layout: index_location "end" (the default) or
+        // "start", and index_codecs = bytes (either endian) optionally followed
+        // by crc32c; any other index codec can't be decoded and is refused
+        void readV3ShardIndex(const nlohmann::json & scfg) {
+            const std::string loc = scfg.value("index_location", std::string("end"));
+            if(loc != "end" && loc != "start") {
+                throw std::runtime_error("z5.DatasetMetadata.fromJsonV3: invalid shard index_location: " + loc);
             }
+            shardIndexAtStart = loc == "start";
+
             const auto & ic = scfg.at("index_codecs");
-            const bool supported = ic.is_array() && ic.size() == 2 &&
+            const bool supported = ic.is_array() && (ic.size() == 1 || ic.size() == 2) &&
                 ic[0].at("name") == "bytes" &&
-                ic[0].contains("configuration") &&
-                ic[0].at("configuration").value("endian", std::string()) == "little" &&
-                ic[1].at("name") == "crc32c";
+                (ic.size() == 1 || ic[1].at("name") == "crc32c");
             if(!supported) {
                 throw std::runtime_error("z5.DatasetMetadata.fromJsonV3: shard index_codecs other than "
-                                         "little-endian bytes + crc32c are not supported: " + ic.dump());
+                                         "bytes, optionally followed by crc32c, are not supported: " +
+                                         ic.dump());
             }
+            const auto & bytesCfg = ic[0].contains("configuration") ? ic[0].at("configuration")
+                                                                     : nlohmann::json::object();
+            shardIndexBigEndian = types::readV3BytesEndian(bytesCfg, sizeof(uint64_t));
+            shardIndexChecksum = ic.size() == 2;
         }
 
         void fromJsonV3(const nlohmann::json & j) {
@@ -431,7 +437,7 @@ namespace z5 {
                     chunkShape = types::ShapeType(innerShapeJson.begin(), innerShapeJson.end());
                     shardShape = outerShape;
                     innerCodecs = &scfg.at("codecs");
-                    checkV3ShardIndex(scfg);
+                    readV3ShardIndex(scfg);
                     break;
                 }
             }
@@ -470,6 +476,12 @@ namespace z5 {
         // zarr v3 specific: chunk elements are stored big-endian (``bytes`` codec
         // with endian "big"); z5 always writes little-endian for new datasets
         bool bigEndian = false;
+
+        // zarr v3 specific: layout of the shard index (sharding codec's
+        // index_location and index_codecs); new arrays use the defaults
+        bool shardIndexAtStart = false;
+        bool shardIndexBigEndian = false;
+        bool shardIndexChecksum = true;
 
         // zarr v3 specific: composed permutation of the ``transpose`` codecs
         // (numpy ``transpose`` semantics); empty == no transpose
