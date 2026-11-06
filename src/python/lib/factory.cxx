@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/unique_ptr.h>
 
 #include "z5/factory.hxx"
@@ -30,11 +31,18 @@ namespace z5 {
                                    const std::vector<std::size_t> & shards,
                                    const std::string & chunk_key_encoding,
                                    const std::vector<std::size_t> & transpose,
-                                   const bool crc32c){
+                                   const bool crc32c,
+                                   const std::optional<uint64_t> fill_value_bits){
                 DatasetOptions options;
                 options.compressor = compression;
                 types::jsonToCompressionType(nlohmann::json::parse(copts), options.compressionOptions);
-                options.fillValue = fill_value;
+                // z5py passes the exact bits of the fill value as the dtype
+                if(fill_value_bits) {
+                    options.fillValue = types::fillValueFromBits(types::Datatypes::n5ToDtype().at(dtype),
+                                                                 *fill_value_bits);
+                } else {
+                    options.fillValue = fill_value;
+                }
                 options.zarrDelimiter = dimension_separator;
                 options.zarrFormat = zarr_format;
                 options.chunkKeyEncoding = chunk_key_encoding;
@@ -54,6 +62,7 @@ namespace z5 {
             nb::arg("chunk_key_encoding")=std::string("default"),
             nb::arg("transpose")=std::vector<std::size_t>(),
             nb::arg("crc32c")=false,
+            nb::arg("fill_value_bits")=nb::none(),
             nb::call_guard<nb::gil_scoped_release>());
     }
 
