@@ -394,6 +394,13 @@ namespace z5 {
                     break;
                 }
             }
+            if(sharded && shape.empty()) {
+                // z5 marks unsharded datasets by an empty shard shape, so it can't
+                // tell a zero-dimensional shard apart; reading the shard as a plain
+                // chunk would return wrong data
+                throw std::runtime_error("z5.DatasetMetadata.fromJsonV3: sharded zero-dimensional arrays "
+                                         "are not supported");
+            }
             if(!sharded) {
                 chunkShape = outerShape;
             } else if(codecs.size() != 1) {
@@ -466,6 +473,11 @@ namespace z5 {
         void checkShapes() {
             if(shape.size() != chunkShape.size()) {
                 throw std::runtime_error("Dimension of shape and chunks does not agree");
+            }
+            // n5 stores chunks in a directory per axis, so a zero-dimensional
+            // chunk would be the dataset directory itself
+            if(!isZarr && shape.empty()) {
+                throw std::runtime_error("z5: zero-dimensional datasets are only supported for zarr");
             }
         }
 
